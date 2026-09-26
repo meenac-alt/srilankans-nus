@@ -8,7 +8,7 @@ on:
   workflow_dispatch:       # "Run workflow" button for an instant refresh
 
 permissions:
-  contents: read
+  contents: write   # lets the workflow commit the bumped VERSION back
   pages: write
   id-token: write
 
@@ -21,6 +21,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # On every push, bump the patch number in VERSION (0.1.0 → 0.1.1) and commit it back.
+      # Pushes made by this workflow don't trigger another run. To change major/minor, edit
+      # VERSION yourself (e.g. 0.2.0) — a push that edits VERSION is left as-is.
+      - name: Bump version
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if git diff --name-only "$BEFORE" HEAD 2>/dev/null | grep -qx VERSION; then
+            echo "VERSION edited in this push, keeping $(cat VERSION)"; exit 0
+          fi
+          IFS=. read -r major minor patch < VERSION
+          echo "$major.$minor.$((patch + 1))" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: bump version to $(cat VERSION)"
+          git push
 
       # The sheet link lives in the SHEET_URL repository secret, so it never appears in the
       # public repo or site. Only the columns below are copied into the published data.csv
@@ -32,6 +52,7 @@ jobs:
           if [ -z "$SHEET_URL" ]; then echo "::error::SHEET_URL secret is not set"; exit 1; fi
           mkdir -p site
           cp index.html site/
+          sed -i "s|<span id=\"version\"></span>| · v$(tr -d '[:space:]' < VERSION)|" site/index.html
           date -u +%Y-%m-%dT%H:%M:%SZ > site/updated.txt
           [ -d photos ] && cp -r photos site/
           python3 - <<'EOF'
