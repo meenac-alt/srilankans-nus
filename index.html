@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sri Lankan Students in NUS</title>
+<title>Sri Lankans in NUS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -117,6 +117,9 @@
     background: var(--orange-soft);
     color: #b35c00;
   }
+  .keywords { font-size: .8rem; color: var(--muted); line-height: 1.45; margin-top: 4px; }
+  .keywords b { color: var(--text); font-weight: 600; }
+  .keywords i { font-style: italic; }
   .linkedin {
     margin-top: auto;
     padding-top: 10px;
@@ -127,7 +130,6 @@
   }
   .linkedin:hover { color: var(--orange); }
   .linkedin svg { width: 16px; height: 16px; fill: currentColor; }
-  .muted-link { margin-top: auto; padding-top: 10px; font-size: .85rem; color: var(--muted); }
 
   .msg {
     grid-column: 1 / -1;
@@ -148,7 +150,7 @@
 
 <main>
   <div class="controls">
-    <input id="search" type="search" placeholder="Search by name…">
+    <input id="search" type="search" placeholder="Search by name or research area…">
     <select id="faculty"><option value="">All faculties</option></select>
     <select id="category"><option value="">All categories</option></select>
   </div>
@@ -156,19 +158,20 @@
   <div class="grid" id="grid"><div class="msg">Loading…</div></div>
 </main>
 
-<footer>Sri Lankans in NUS · Data updates automatically from Google Sheets</footer>
+<footer>Sri Lankans in NUS · Contact and other information above was submitted directly by each individual<span id="updated"></span></footer>
 
 <script>
-  // ▼▼▼ PASTE YOUR GOOGLE SHEET LINK HERE (share link or published CSV link) ▼▼▼
-  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x3Q3wX6-XlcbtPxUK8v5eOMde2Wnbgx_XZtY7XjWab8/edit?usp=sharing";
-  // ▲▲▲ Columns: Name | Faculty | Category | LinkedIn | Profile Picture ▲▲▲
+  // data.csv is generated at deploy time by .github/workflows/deploy.yml from the
+  // Google Sheet whose link is stored in the SHEET_URL repository secret.
+  // Columns: Name | Faculty | Category | LinkedIn | Profile Picture | Research Areas
+  const DATA_URL = "data.csv";
 
-  // Sample rows shown until a real link is pasted above
+  // Sample rows shown when data.csv isn't available (e.g. opening index.html locally)
   const DEMO = [
-    { name: "Example Student", faculty: "School of Computing", category: "PhD Student", linkedin: "example-student", photo: "" },
-    { name: "Another Student", faculty: "College of Design and Engineering", category: "Master's", linkedin: "https://www.linkedin.com/in/another", photo: "" },
-    { name: "Third Student", faculty: "Faculty of Science", category: "Undergraduate", linkedin: "", photo: "" },
-    { name: "Fourth Student", faculty: "NUS Business School", category: "Alumni", linkedin: "fourth", photo: "" }
+    { name: "Example Student", faculty: "School of Computing", category: "PhD Student", linkedin: "example-student", photo: "", research: "Machine Learning, Computer Vision" },
+    { name: "Another Student", faculty: "College of Design and Engineering", category: "Master's", linkedin: "https://www.linkedin.com/in/another", photo: "", research: "" },
+    { name: "Third Student", faculty: "Faculty of Science", category: "Undergraduate", linkedin: "", photo: "", research: "" },
+    { name: "Fourth Student", faculty: "NUS Business School", category: "Alumni", linkedin: "fourth", photo: "", research: "" }
   ];
 
   let data = [];
@@ -208,6 +211,9 @@
     else img.remove();
   };
 
+  // "ML; NLP, HCI" → ["ML", "NLP", "HCI"]
+  const areas = v => (v || "").split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+
   const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   // Match a column even if the header is written slightly differently
@@ -233,9 +239,8 @@
         <div class="name">${esc(d.name)}</div>
         ${d.faculty ? `<div class="faculty">${esc(d.faculty)}</div>` : ""}
         ${d.category ? `<span class="tag">${esc(d.category)}</span>` : ""}
-        ${li
-          ? `<a class="linkedin" href="${esc(li)}" target="_blank" rel="noopener">${LI_ICON} Connect on LinkedIn</a>`
-          : `<span class="muted-link">LinkedIn not provided</span>`}
+        ${areas(d.research).length ? `<div class="keywords"><b>Research areas:</b> <i>${areas(d.research).map(esc).join(", ")}</i></div>` : ""}
+        ${li ? `<a class="linkedin" href="${esc(li)}" target="_blank" rel="noopener">${LI_ICON} Connect on LinkedIn</a>` : ""}
       </div>
     </article>`;
   }
@@ -245,15 +250,18 @@
     const fac = $("faculty").value;
     const cat = $("category").value;
     const list = data
-      .filter(d => d.name.toLowerCase().includes(q)
+      .filter(d => (d.name + " " + d.research).toLowerCase().includes(q)
         && (!fac || d.faculty === fac)
         && (!cat || d.category === cat))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    $("count").innerHTML = `<b>${list.length}</b> ${list.length === 1 ? "student" : "students"}`;
+    const people = n => n === 1 ? "person" : "people";
+    $("count").innerHTML = (q || fac || cat)
+      ? `<b>${list.length}</b> of ${data.length} ${people(data.length)}`
+      : `<b>${data.length}</b> ${people(data.length)}`;
     $("grid").innerHTML = list.length
       ? list.map(card).join("")
-      : `<div class="msg">No students match your search.</div>`;
+      : `<div class="msg">No one matches your search.</div>`;
   }
 
   function fillSelect(id, label, key) {
@@ -271,43 +279,30 @@
   ["search", "faculty", "category"].forEach(id =>
     $(id).addEventListener(id === "search" ? "input" : "change", render));
 
-  // Accept a normal share link and turn it into a CSV link
-  function toCsvUrl(url) {
-    if (/output=csv|format=csv|out:csv/.test(url)) return url;
-    const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
-    if (m && m[1] !== "e") {
-      const gid = (url.match(/[#&?]gid=(\d+)/) || [])[1];
-      return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv` + (gid ? `&gid=${gid}` : "");
-    }
-    return url;
-  }
+  Papa.parse(DATA_URL + "?t=" + Date.now(), {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: res => load(res.data.map(r => ({
+      name:     pick(r, "name"),
+      faculty:  pick(r, "faculty", "school", "college"),
+      category: pick(r, "category", "categ"),
+      linkedin: pick(r, "linkedin", "linked"),
+      photo:    pick(r, "profilepic", "picture", "photo", "image"),
+      research: pick(r, "research")
+    }))),
+    error: () => load(DEMO)
+  });
 
-  const showError = text => $("grid").innerHTML = `<div class="msg">${text}</div>`;
-
-  if (/^https?:\/\//.test(SHEET_URL)) {
-    const csvUrl = toCsvUrl(SHEET_URL);
-    Papa.parse(csvUrl + (csvUrl.includes("?") ? "&" : "?") + "t=" + Date.now(), {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      beforeFirstChunk: chunk => {
-        if (/^\s*<(!doctype|html)/i.test(chunk)) {
-          showError("The sheet link returned a web page, not data. Set sharing to “Anyone with the link – Viewer”, or use the published CSV link.");
-          return "";
-        }
-      },
-      complete: res => res.data.length && load(res.data.map(r => ({
-        name:     pick(r, "name"),
-        faculty:  pick(r, "faculty", "school", "college"),
-        category: pick(r, "category", "categ"),
-        linkedin: pick(r, "linkedin", "linked"),
-        photo:    pick(r, "profilepic", "picture", "photo", "image")
-      }))),
-      error: () => showError("Couldn't load the sheet. Check the link and its sharing settings.")
-    });
-  } else {
-    load(DEMO);
-  }
+  // updated.txt holds the time the deploy workflow last pulled the sheet (ISO, UTC)
+  fetch("updated.txt?t=" + Date.now())
+    .then(r => r.ok ? r.text() : "")
+    .then(t => {
+      const when = new Date(t.trim());
+      if (!t || isNaN(when)) return;
+      $("updated").textContent = " · Last updated " + when.toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" });
+    })
+    .catch(() => {});
 </script>
 </body>
 </html>
