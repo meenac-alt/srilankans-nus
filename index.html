@@ -6,13 +6,14 @@
 <title>Sri Lankans in NUS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
   :root {
     --blue: #003d7c;       /* NUS blue */
     --blue-soft: #e8eef6;
     --orange: #ef7c00;     /* NUS orange */
     --orange-soft: #fdf0e1;
+    --orange-text: #a85600;  /* darker orange for text, meets WCAG AA contrast */
     --bg: #ffffff;
     --surface: #f7f9fc;
     --text: #1a2233;
@@ -60,9 +61,9 @@
     outline: none;
     transition: border-color .15s;
   }
-  .controls input:focus, .controls select:focus { border-color: var(--blue); }
+  .controls input:focus-visible, .controls select:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
   .count { color: var(--muted); font-size: .9rem; margin: 0 0 18px; }
-  .count b { color: var(--orange); }
+  .count b { color: var(--orange-text); }
 
   /* ---------- Cards ---------- */
   .grid {
@@ -115,7 +116,7 @@
     border-radius: 999px;
     font-size: .76rem; font-weight: 600;
     background: var(--orange-soft);
-    color: #b35c00;
+    color: var(--orange-text);
   }
   .keywords { font-size: .8rem; color: var(--muted); line-height: 1.45; margin-top: 4px; }
   .keywords b { color: var(--text); font-weight: 600; }
@@ -150,9 +151,9 @@
 
 <main>
   <div class="controls">
-    <input id="search" type="search" placeholder="Search by name or research area…">
-    <select id="faculty"><option value="">All faculties</option></select>
-    <select id="category"><option value="">All categories</option></select>
+    <input id="search" type="search" placeholder="Search by name or research area…" aria-label="Search by name or research area">
+    <select id="faculty" aria-label="Filter by faculty"><option value="">All faculties</option></select>
+    <select id="category" aria-label="Filter by category"><option value="">All categories</option></select>
   </div>
   <p class="count" id="count"></p>
   <div class="grid" id="grid"><div class="msg">Loading…</div></div>
@@ -180,12 +181,17 @@
   const esc = s => String(s || "").replace(/[&<>"']/g, c =>
     ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
+  // Only ever link to linkedin.com, so a form entry can't point the button at another site
   function linkedinUrl(v) {
     v = (v || "").trim();
     if (!v) return "";
-    if (/^https?:\/\//i.test(v)) return v;
-    if (v.includes("linkedin.com")) return "https://" + v.replace(/^\/+/, "");
-    return "https://www.linkedin.com/in/" + v.replace(/^@/, "");
+    if (/^@?[\w-]+$/.test(v)) return "https://www.linkedin.com/in/" + v.replace(/^@/, "");   // bare username
+    try {
+      const u = new URL(/^https?:\/\//i.test(v) ? v : "https://" + v.replace(/^\/+/, ""));
+      if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) return "";
+      u.protocol = "https:";
+      return u.href;
+    } catch { return ""; }
   }
 
   // Google Drive links (e.g. from a Google Form upload) → list of image URLs to try in order
@@ -215,15 +221,6 @@
   const areas = v => (v || "").split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
 
   const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-
-  // Match a column even if the header is written slightly differently
-  function pick(row, ...names) {
-    for (const k of Object.keys(row)) {
-      const key = k.toLowerCase().replace(/[^a-z]/g, "");
-      if (names.some(n => key.includes(n))) return (row[k] || "").trim();
-    }
-    return "";
-  }
 
   const LI_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>';
 
@@ -261,12 +258,13 @@
       : `<b>${data.length}</b> ${people(data.length)}`;
     $("grid").innerHTML = list.length
       ? list.map(card).join("")
-      : `<div class="msg">No one matches your search.</div>`;
+      : `<div class="msg">${data.length ? "No one matches your search." : "No entries yet."}</div>`;
   }
 
   function fillSelect(id, label, key) {
     const opts = [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
-    $(id).innerHTML = `<option value="">${label}</option>` + opts.map(o => `<option>${esc(o)}</option>`).join("");
+    // Explicit value: an option's text has its whitespace collapsed, which would break the === filter
+    $(id).innerHTML = `<option value="">${label}</option>` + opts.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
   }
 
   function load(list) {
@@ -279,19 +277,28 @@
   ["search", "faculty", "category"].forEach(id =>
     $(id).addEventListener(id === "search" ? "input" : "change", render));
 
-  Papa.parse(DATA_URL + "?t=" + Date.now(), {
+  // Sample rows only for local preview; on the live site a failed load must not show made-up people
+  const isLocal = location.protocol === "file:" || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const loadFailed = () => isLocal
+    ? load(DEMO)
+    : $("grid").innerHTML = `<div class="msg">Couldn't load the directory. Please refresh the page or try again later.</div>`;
+
+  // data.csv headers are written by the deploy workflow, so they're always exactly these
+  const val = (r, k) => (r[k] || "").trim();
+  if (!window.Papa) loadFailed();
+  else Papa.parse(DATA_URL + "?t=" + Date.now(), {
     download: true,
     header: true,
     skipEmptyLines: true,
     complete: res => load(res.data.map(r => ({
-      name:     pick(r, "name"),
-      faculty:  pick(r, "faculty", "school", "college"),
-      category: pick(r, "category", "categ"),
-      linkedin: pick(r, "linkedin", "linked"),
-      photo:    pick(r, "profilepic", "picture", "photo", "image"),
-      research: pick(r, "research")
+      name:     val(r, "Name"),
+      faculty:  val(r, "Faculty"),
+      category: val(r, "Category"),
+      linkedin: val(r, "LinkedIn"),
+      photo:    val(r, "Profile Picture"),
+      research: val(r, "Research Areas")
     }))),
-    error: () => load(DEMO)
+    error: loadFailed
   });
 
   // updated.txt holds the time the deploy workflow last pulled the sheet (ISO, UTC)

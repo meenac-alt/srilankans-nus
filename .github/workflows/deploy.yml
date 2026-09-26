@@ -8,43 +8,53 @@ on:
   workflow_dispatch:       # "Run workflow" button for an instant refresh
 
 permissions:
-  contents: write   # lets the workflow commit the bumped VERSION back and create releases
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
-  # On every push, bump the patch number in VERSION (0.1.0 → 0.1.1), commit it back, and
-  # publish a GitHub Release tagged v<version>. Pushes made by this workflow don't trigger
-  # another run. To change major/minor, edit VERSION yourself (e.g. 0.2.0) — a push that
-  # edits VERSION is released as-is. This job has no concurrency group, so a form-triggered
-  # rebuild can't cancel it halfway.
+  # On every push, publish a GitHub Release tagged v<version>. If VERSION already has a
+  # release, bump the patch number first (0.1.0 → 0.1.1) and commit it back; if it doesn't
+  # (you edited it yourself, e.g. to 0.2.0), release it as-is. Pushes made by this workflow
+  # don't trigger another run. Releases run one at a time and are never cancelled, so two
+  # quick pushes can't claim the same number.
   release:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # commit the bumped VERSION back and create releases
+    concurrency:
+      group: release
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }}   # latest main, including bumps from earlier runs
           fetch-depth: 0
 
       - name: Bump version
-        env:
-          BEFORE: ${{ github.event.before }}
         run: |
-          if git diff --name-only "$BEFORE" HEAD 2>/dev/null | grep -qx VERSION; then
-            echo "VERSION edited in this push, keeping $(cat VERSION)"; exit 0
+          # Tolerate Windows line endings and a leading "v"
+          V=$(tr -d '[:space:]' < VERSION); V=${V#[vV]}
+          if ! [[ $V =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::VERSION must look like 1.2.3, got '$V'"; exit 1
           fi
-          IFS=. read -r major minor patch < VERSION
-          echo "$major.$minor.$((patch + 1))" > VERSION
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
+            V="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+          else
+            echo "v$V has no release yet, releasing it as-is"
+          fi
+          echo "$V" > VERSION
+          if git diff --quiet VERSION; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore: bump version to $(cat VERSION)"
-          git push
+          git commit -m "chore: bump version to $V" VERSION
+          git pull --rebase origin "$GITHUB_REF_NAME"   # in case someone pushed while this job ran
+          git push origin "HEAD:$GITHUB_REF_NAME"
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v$(tr -d '[:space:]' < VERSION)"
+          TAG="v$(cat VERSION)"
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "$TAG already exists"; exit 0
           fi
@@ -58,9 +68,6 @@ jobs:
     # Run after `release` on pushes, and on its own for schedule / form / manual runs
     if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
-    concurrency:
-      group: pages
-      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,45 +85,64 @@ jobs:
           cp index.html site/
           sed -i "s|<span id=\"version\"></span>| · v$(tr -d '[:space:]' < VERSION)|" site/index.html
           date -u +%Y-%m-%dT%H:%M:%SZ > site/updated.txt
-          [ -d photos ] && cp -r photos site/
+          if [ -d photos ]; then cp -r photos site/; fi
           python3 - <<'EOF'
           import csv, io, os, re, sys, urllib.request
 
           url = os.environ["SHEET_URL"].strip()
           # Accept a normal share link as well as a published CSV link
+          if re.search(r"/pub\b|output=csv", url):
+              print("::warning::SHEET_URL is a 'Publish to web' link. Google caches those for about 5 minutes, "
+                    "so new form responses can be missed. Use the sheet's normal share link instead.")
           if not re.search(r"output=csv|format=csv|out:csv", url):
               m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", url)
               if m and m.group(1) != "e":
                   gid = re.search(r"[#&?]gid=(\d+)", url)
                   url = f"https://docs.google.com/spreadsheets/d/{m.group(1)}/export?format=csv" + (f"&gid={gid.group(1)}" if gid else "")
 
-          text = urllib.request.urlopen(url).read().decode("utf-8-sig")
+          text = urllib.request.urlopen(url, timeout=60).read().decode("utf-8-sig")
           if re.match(r"\s*<(!doctype|html)", text, re.I):
               sys.exit("The link returned a web page, not CSV. Set sharing to 'Anyone with the link - Viewer', or use the published CSV link.")
-          rows = list(csv.DictReader(io.StringIO(text)))
+          reader = csv.DictReader(io.StringIO(text))
+          rows = list(reader)
 
-          # Match a column even if the header is written slightly differently
-          def pick(row, *keys):
-              for k, v in row.items():
-                  kk = "".join(c for c in (k or "").lower() if c.isalpha())
-                  if any(x in kk for x in keys):
-                      return (v or "").strip()
-              return ""
-
+          # Find each column once, from the headers. A header matches if, ignoring case, spaces and
+          # punctuation, it equals one of the names below or starts with one. Exact matches win, so
+          # "Name" beats "Name of your supervisor". Starts-with (not contains) keeps questions such
+          # as "I consent to my name and photo being shown" or "Are you a research student?" from
+          # being taken for the Name, Photo or Research Areas column.
           cols = {
-              "Name":           ("name",),
-              "Faculty":        ("faculty", "school", "college"),
-              "Category":       ("category", "categ"),
-              "LinkedIn":       ("linkedin", "linked"),
-              "Profile Picture": ("profilepic", "picture", "photo", "image"),
-              "Research Areas": ("research",),
+              "Name":            ("name", "fullname", "yourname", "preferredname"),
+              "Faculty":         ("faculty", "school", "college", "department"),
+              "Category":        ("category",),
+              "LinkedIn":        ("linkedin",),
+              "Profile Picture": ("profilepicture", "profilepic", "profilephoto", "photo", "picture", "image"),
+              "Research Areas":  ("researcharea", "research"),
           }
+          norm = lambda h: "".join(c for c in (h or "").lower() if c.isalpha())
+          headers = [h for h in (reader.fieldnames or []) if norm(h)]
+          source, used = {}, set()
+          for col, keys in cols.items():
+              free = [h for h in headers if h not in used]
+              hit = (next((h for k in keys for h in free if norm(h) == k), None)
+                     or next((h for k in keys for h in free if norm(h).startswith(k)), None))
+              if hit:
+                  source[col] = hit
+                  used.add(hit)
+              print(f"{col:16} <- {hit!r}" if hit else f"::warning::No column found for {col}")
+          if "Name" not in source:
+              sys.exit("No Name column found - check the sheet's column headers")
+
+          # Trim and squeeze repeated spaces ("School of  Computing" would otherwise be its own
+          # filter option); keep line breaks, which separate research areas
+          clean = lambda v: re.sub(r"[^\S\n]+", " ", v or "").strip()
+
           n = 0
           with open("site/data.csv", "w", encoding="utf-8", newline="") as f:
               w = csv.writer(f)
               w.writerow(cols)
               for r in rows:
-                  out = [pick(r, *keys) for keys in cols.values()]
+                  out = [clean(r.get(source[c])) if c in source else "" for c in cols]
                   if out[0]:
                       w.writerow(out)
                       n += 1
@@ -131,10 +157,18 @@ jobs:
 
   deploy:
     needs: build
+    # Explicit condition: without it, a skipped `release` (schedule / form / manual runs)
+    # makes GitHub skip this job too, even though `build` succeeded
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # One deployment at a time. A newer run waits instead of cancelling the one in progress,
+    # and replaces any older run still waiting, so the latest data always wins.
     concurrency:
       group: pages
-      cancel-in-progress: true
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
