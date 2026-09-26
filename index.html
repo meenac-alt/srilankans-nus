@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sri Lankan Students in NUS</title>
+<title>Sri Lankans in NUS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -158,7 +158,7 @@
 
 <script>
   // ▼▼▼ PASTE YOUR GOOGLE SHEET LINK HERE (share link or published CSV link) ▼▼▼
-  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x3Q3wX6-XlcbtPxUK8v5eOMde2Wnbgx_XZtY7XjWab8/edit?usp=sharing";
+  const SHEET_URL = "PASTE_YOUR_GOOGLE_SHEET_LINK_HERE";
   // ▲▲▲ Columns: Name | Faculty | Category | LinkedIn | Profile Picture ▲▲▲
 
   // Sample rows shown until a real link is pasted above
@@ -183,14 +183,26 @@
     return "https://www.linkedin.com/in/" + v.replace(/^@/, "");
   }
 
-  // Google Drive links (e.g. from a Google Form upload) → direct image URL
-  function photoUrl(v) {
+  // Google Drive links (e.g. from a Google Form upload) → list of image URLs to try in order
+  function photoUrls(v) {
     v = (v || "").split(",")[0].trim();       // forms may store several files; use the first
-    if (!v) return "";
-    const m = v.match(/drive\.google\.com\/(?:open\?id=|file\/d\/|uc\?(?:[^#]*&)?id=|thumbnail\?id=)([a-zA-Z0-9_-]+)/);
-    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w500`;
-    return /^https?:\/\//i.test(v) ? v : "";
+    if (!v) return [];
+    const m = v.match(/drive\.google\.com\/(?:open\?(?:[^#]*&)?id=|file\/d\/|uc\?(?:[^#]*&)?id=|thumbnail\?(?:[^#]*&)?id=)([a-zA-Z0-9_-]{10,})/)
+           || v.match(/docs\.google\.com\/(?:uc|open)\?(?:[^#]*&)?id=([a-zA-Z0-9_-]{10,})/);
+    if (m) return [
+      `https://drive.google.com/thumbnail?id=${m[1]}&sz=w500`,
+      `https://lh3.googleusercontent.com/d/${m[1]}=w500`,
+      `https://drive.google.com/uc?export=view&id=${m[1]}`
+    ];
+    return /^https?:\/\//i.test(v) ? [v] : [];
   }
+
+  // If an image fails, try the next address; if all fail, show initials
+  window.nextPhoto = img => {
+    const rest = JSON.parse(img.dataset.rest || "[]");
+    if (rest.length) { img.dataset.rest = JSON.stringify(rest.slice(1)); img.src = rest[0]; }
+    else img.remove();
+  };
 
   const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
@@ -207,11 +219,11 @@
 
   function card(d) {
     const li = linkedinUrl(d.linkedin);
-    const pic = photoUrl(d.photo);
+    const pics = photoUrls(d.photo);
     return `<article class="card">
       <div class="photo">
         <div class="initials">${esc(initials(d.name))}</div>
-        ${pic ? `<img src="${esc(pic)}" alt="${esc(d.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+        ${pics.length ? `<img src="${esc(pics[0])}" data-rest='${esc(JSON.stringify(pics.slice(1)))}' alt="${esc(d.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="nextPhoto(this)">` : ""}
       </div>
       <div class="info">
         <div class="name">${esc(d.name)}</div>
