@@ -5,27 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sri Lankan Students in NUS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root {
-    --maroon: #8d153a;
-    --gold: #f4b400;
-    --green: #00534e;
-    --bg: #f7f5f2;
-    --card: #ffffff;
-    --text: #1f1f1f;
-    --muted: #6b6b6b;
-    --border: #e6e1da;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #141212;
-      --card: #1e1b1b;
-      --text: #f2eeee;
-      --muted: #a8a0a0;
-      --border: #332e2e;
-    }
+    --blue: #003d7c;       /* NUS blue */
+    --blue-soft: #e8eef6;
+    --orange: #ef7c00;     /* NUS orange */
+    --orange-soft: #fdf0e1;
+    --bg: #ffffff;
+    --surface: #f7f9fc;
+    --text: #1a2233;
+    --muted: #5d6b82;
+    --border: #dfe5ee;
   }
   * { box-sizing: border-box; }
   body {
@@ -34,97 +26,154 @@
     background: var(--bg);
     color: var(--text);
   }
+
+  /* ---------- Header ---------- */
   header {
-    background: linear-gradient(135deg, var(--maroon), #5e0d27);
-    color: #fff;
-    padding: 48px 16px 40px;
+    background: var(--bg);
+    border-bottom: 4px solid var(--orange);
+    padding: 48px 16px 36px;
     text-align: center;
-    border-bottom: 5px solid var(--gold);
   }
-  header h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 4vw, 2.4rem); }
-  header p { margin: 0; opacity: .85; }
-  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
-  .controls {
-    display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;
+  header h1 {
+    margin: 0 0 10px;
+    font-size: clamp(1.7rem, 4.5vw, 2.6rem);
+    font-weight: 800;
+    color: var(--blue);
+    letter-spacing: -0.02em;
   }
+  header h1 span { color: var(--orange); }
+  header p { margin: 0 auto; max-width: 620px; color: var(--muted); line-height: 1.5; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 16px 56px; }
+
+  /* ---------- Filters ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
   .controls input, .controls select {
-    flex: 1 1 220px;
-    padding: 10px 12px;
+    flex: 1 1 200px;
+    padding: 11px 14px;
     font: inherit;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--card);
+    font-size: .95rem;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
     color: var(--text);
+    outline: none;
+    transition: border-color .15s;
   }
-  .count { color: var(--muted); font-size: .9rem; margin-bottom: 10px; }
-  .table-wrap {
-    background: var(--card);
+  .controls input:focus, .controls select:focus { border-color: var(--blue); }
+  .count { color: var(--muted); font-size: .9rem; margin: 0 0 18px; }
+  .count b { color: var(--orange); }
+
+  /* ---------- Cards ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow-x: auto;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
   }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 12px 16px; text-align: left; }
-  th {
-    background: var(--green); color: #fff;
-    font-weight: 600; font-size: .9rem; cursor: pointer; user-select: none;
-    white-space: nowrap;
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(0, 61, 124, .12);
+    border-color: var(--blue);
   }
-  tr + tr td { border-top: 1px solid var(--border); }
-  tbody tr:hover { background: rgba(244,180,0,.08); }
-  a { color: var(--maroon); font-weight: 500; text-decoration: none; }
-  @media (prefers-color-scheme: dark) { a { color: var(--gold); } }
-  a:hover { text-decoration: underline; }
+  .photo {
+    aspect-ratio: 1 / 1;            /* 1:1 profile pictures */
+    width: 100%;
+    background: var(--blue-soft);
+    position: relative;
+    overflow: hidden;
+  }
+  .photo img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .initials {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; font-weight: 700;
+    color: var(--blue);
+    background: linear-gradient(135deg, var(--blue-soft), var(--orange-soft));
+  }
+  .info { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .name { font-weight: 700; font-size: 1.05rem; color: var(--blue); line-height: 1.3; }
+  .faculty { font-size: .88rem; color: var(--muted); }
   .tag {
-    display: inline-block; padding: 3px 10px; border-radius: 999px;
-    font-size: .8rem; font-weight: 600;
-    background: rgba(0,83,78,.12); color: var(--green);
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: .76rem; font-weight: 600;
+    background: var(--orange-soft);
+    color: #b35c00;
   }
-  @media (prefers-color-scheme: dark) { .tag { color: #6fd3c9; } }
-  .msg { padding: 32px; text-align: center; color: var(--muted); }
-  footer { text-align: center; color: var(--muted); font-size: .8rem; padding-bottom: 24px; }
+  .linkedin {
+    margin-top: auto;
+    padding-top: 10px;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: .88rem; font-weight: 600;
+    color: var(--blue);
+    text-decoration: none;
+  }
+  .linkedin:hover { color: var(--orange); }
+  .linkedin svg { width: 16px; height: 16px; fill: currentColor; }
+  .muted-link { margin-top: auto; padding-top: 10px; font-size: .85rem; color: var(--muted); }
+
+  .msg {
+    grid-column: 1 / -1;
+    padding: 40px 16px; text-align: center; color: var(--muted);
+    background: var(--surface); border-radius: 12px;
+  }
+  footer {
+    text-align: center; color: var(--muted); font-size: .8rem;
+    padding: 20px 16px 32px; border-top: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Sri Lankan Students in NUS</h1>
-  <p>Connect with the Sri Lankan community at the National University of Singapore</p>
+  <h1>Sri Lankan Students <span>in NUS</span></h1>
+  <p>Connect with the Sri Lankan community at the National University of Singapore — reach out for advice on admissions, programmes, scholarships and life in Singapore.</p>
 </header>
 
 <main>
   <div class="controls">
     <input id="search" type="search" placeholder="Search by name…">
+    <select id="faculty"><option value="">All faculties</option></select>
     <select id="category"><option value="">All categories</option></select>
   </div>
-  <div class="count" id="count"></div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th data-key="name">Name ↕</th>
-          <th data-key="linkedin">LinkedIn</th>
-          <th data-key="category">Category ↕</th>
-        </tr>
-      </thead>
-      <tbody id="rows"><tr><td colspan="3" class="msg">Loading…</td></tr></tbody>
-    </table>
-  </div>
+  <p class="count" id="count"></p>
+  <div class="grid" id="grid"><div class="msg">Loading…</div></div>
 </main>
-<footer>Data updates automatically from Google Sheets.</footer>
+
+<footer>Sri Lankan Students in NUS · Data updates automatically from Google Sheets</footer>
 
 <script>
-  // data.csv is generated by the GitHub Action (.github/workflows/deploy.yml)
-  // from the SHEET_CSV_URL repository secret — the sheet link never appears here.
-  const SHEET_CSV_URL = "data.csv";
+  // ▼▼▼ PASTE YOUR GOOGLE SHEET LINK HERE (share link or published CSV link) ▼▼▼
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x3Q3wX6-XlcbtPxUK8v5eOMde2Wnbgx_XZtY7XjWab8/edit?usp=sharing";
+  // ▲▲▲ Columns: Name | Faculty | Category | LinkedIn | Profile Picture ▲▲▲
 
+  // Sample rows shown until a real link is pasted above
   const DEMO = [
-    { name: "Example Student", linkedin: "example-student", category: "Undergraduate" },
-    { name: "Another Student", linkedin: "https://www.linkedin.com/in/another", category: "PhD" },
-    { name: "Third Student", linkedin: "", category: "Alumni" }
+    { name: "Example Student", faculty: "School of Computing", category: "PhD Student", linkedin: "example-student", photo: "" },
+    { name: "Another Student", faculty: "College of Design and Engineering", category: "Master's", linkedin: "https://www.linkedin.com/in/another", photo: "" },
+    { name: "Third Student", faculty: "Faculty of Science", category: "Undergraduate", linkedin: "", photo: "" },
+    { name: "Fourth Student", faculty: "NUS Business School", category: "Alumni", linkedin: "fourth", photo: "" }
   ];
 
-  let data = [], sortKey = "name", sortAsc = true;
+  let data = [];
   const $ = id => document.getElementById(id);
+
+  const esc = s => String(s || "").replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
   function linkedinUrl(v) {
     v = (v || "").trim();
@@ -133,10 +182,19 @@
     if (v.includes("linkedin.com")) return "https://" + v.replace(/^\/+/, "");
     return "https://www.linkedin.com/in/" + v.replace(/^@/, "");
   }
-  function esc(s) {
-    return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+  // Google Drive links (e.g. from a Google Form upload) → direct image URL
+  function photoUrl(v) {
+    v = (v || "").split(",")[0].trim();       // forms may store several files; use the first
+    if (!v) return "";
+    const m = v.match(/drive\.google\.com\/(?:open\?id=|file\/d\/|uc\?(?:[^#]*&)?id=|thumbnail\?id=)([a-zA-Z0-9_-]+)/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w500`;
+    return /^https?:\/\//i.test(v) ? v : "";
   }
-  // Find a column even if the header is spelled slightly differently
+
+  const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+
+  // Match a column even if the header is written slightly differently
   function pick(row, ...names) {
     for (const k of Object.keys(row)) {
       const key = k.toLowerCase().replace(/[^a-z]/g, "");
@@ -145,43 +203,59 @@
     return "";
   }
 
+  const LI_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>';
+
+  function card(d) {
+    const li = linkedinUrl(d.linkedin);
+    const pic = photoUrl(d.photo);
+    return `<article class="card">
+      <div class="photo">
+        <div class="initials">${esc(initials(d.name))}</div>
+        ${pic ? `<img src="${esc(pic)}" alt="${esc(d.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+      </div>
+      <div class="info">
+        <div class="name">${esc(d.name)}</div>
+        ${d.faculty ? `<div class="faculty">${esc(d.faculty)}</div>` : ""}
+        ${d.category ? `<span class="tag">${esc(d.category)}</span>` : ""}
+        ${li
+          ? `<a class="linkedin" href="${esc(li)}" target="_blank" rel="noopener">${LI_ICON} Connect on LinkedIn</a>`
+          : `<span class="muted-link">LinkedIn not provided</span>`}
+      </div>
+    </article>`;
+  }
+
   function render() {
     const q = $("search").value.toLowerCase();
+    const fac = $("faculty").value;
     const cat = $("category").value;
-    const rows = data
-      .filter(d => d.name.toLowerCase().includes(q) && (!cat || d.category === cat))
-      .sort((a, b) => (sortAsc ? 1 : -1) * a[sortKey].localeCompare(b[sortKey]));
+    const list = data
+      .filter(d => d.name.toLowerCase().includes(q)
+        && (!fac || d.faculty === fac)
+        && (!cat || d.category === cat))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-    $("count").textContent = `${rows.length} student${rows.length === 1 ? "" : "s"}`;
-    $("rows").innerHTML = rows.length ? rows.map(d => {
-      const url = linkedinUrl(d.linkedin);
-      return `<tr>
-        <td>${esc(d.name)}</td>
-        <td>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">View profile</a>` : "—"}</td>
-        <td>${d.category ? `<span class="tag">${esc(d.category)}</span>` : "—"}</td>
-      </tr>`;
-    }).join("") : `<tr><td colspan="3" class="msg">No students found.</td></tr>`;
+    $("count").innerHTML = `<b>${list.length}</b> ${list.length === 1 ? "student" : "students"}`;
+    $("grid").innerHTML = list.length
+      ? list.map(card).join("")
+      : `<div class="msg">No students match your search.</div>`;
+  }
+
+  function fillSelect(id, label, key) {
+    const opts = [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
+    $(id).innerHTML = `<option value="">${label}</option>` + opts.map(o => `<option>${esc(o)}</option>`).join("");
   }
 
   function load(list) {
     data = list.filter(d => d.name);
-    const cats = [...new Set(data.map(d => d.category).filter(Boolean))].sort();
-    $("category").innerHTML = `<option value="">All categories</option>` +
-      cats.map(c => `<option>${esc(c)}</option>`).join("");
+    fillSelect("faculty", "All faculties", "faculty");
+    fillSelect("category", "All categories", "category");
     render();
   }
 
-  $("search").addEventListener("input", render);
-  $("category").addEventListener("change", render);
-  document.querySelectorAll("th[data-key]").forEach(th => th.addEventListener("click", () => {
-    const k = th.dataset.key;
-    if (k === "linkedin") return;
-    sortAsc = sortKey === k ? !sortAsc : true;
-    sortKey = k;
-    render();
-  }));
+  ["search", "faculty", "category"].forEach(id =>
+    $(id).addEventListener(id === "search" ? "input" : "change", render));
 
-  // Turn a normal share/edit link into a CSV link automatically
+  // Accept a normal share link and turn it into a CSV link
   function toCsvUrl(url) {
     if (/output=csv|format=csv|out:csv/.test(url)) return url;
     const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -192,30 +266,31 @@
     return url;
   }
 
-  const showError = text =>
-    $("rows").innerHTML = `<tr><td colspan="3" class="msg">${text}</td></tr>`;
+  const showError = text => $("grid").innerHTML = `<div class="msg">${text}</div>`;
 
-  if (SHEET_CSV_URL) {
-    const csvUrl = toCsvUrl(SHEET_CSV_URL);
+  if (/^https?:\/\//.test(SHEET_URL)) {
+    const csvUrl = toCsvUrl(SHEET_URL);
     Papa.parse(csvUrl + (csvUrl.includes("?") ? "&" : "?") + "t=" + Date.now(), {
       download: true,
       header: true,
       skipEmptyLines: true,
       beforeFirstChunk: chunk => {
         if (/^\s*<(!doctype|html)/i.test(chunk)) {
-          showError("The sheet link returned a web page, not data. Publish it as CSV, or set sharing to “Anyone with the link – Viewer”.");
+          showError("The sheet link returned a web page, not data. Set sharing to “Anyone with the link – Viewer”, or use the published CSV link.");
           return "";
         }
       },
       complete: res => res.data.length && load(res.data.map(r => ({
-        name: pick(r, "name"),
+        name:     pick(r, "name"),
+        faculty:  pick(r, "faculty", "school", "college"),
+        category: pick(r, "category", "categ"),
         linkedin: pick(r, "linkedin", "linked"),
-        category: pick(r, "category", "categ")
+        photo:    pick(r, "profilepic", "picture", "photo", "image")
       }))),
-      error: () => showError("Couldn't load the sheet. Check it's published to the web as CSV.")
+      error: () => showError("Couldn't load the sheet. Check the link and its sharing settings.")
     });
   } else {
-    load(DEMO); // shows sample rows until you paste your sheet link
+    load(DEMO);
   }
 </script>
 </body>
