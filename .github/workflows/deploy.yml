@@ -3,9 +3,7 @@ name: Build and deploy site
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: "0 * * * *"   # refresh data from the sheet every hour
-  workflow_dispatch:       # "Run workflow" button for an instant refresh
+  workflow_dispatch:   # started by the sheet's Apps Script on any change, or the "Run workflow" button
 
 permissions:
   contents: read
@@ -65,7 +63,7 @@ jobs:
 
   build:
     needs: release
-    # Run after `release` on pushes, and on its own for schedule / form / manual runs
+    # Run after `release` on pushes, and on its own for sheet-triggered / manual runs
     if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -133,20 +131,36 @@ jobs:
           if "Name" not in source:
               sys.exit("No Name column found - check the sheet's column headers")
 
+          # The respondent's email, if the form collects it. Used only to spot repeat submissions;
+          # it's never written to data.csv.
+          email_col = (next((h for h in headers if norm(h) in ("emailaddress", "email")), None)
+                       or next((h for h in headers if norm(h).startswith("email")), None))
+          print(f"{'(dedupe key)':16} <- {email_col!r}" if email_col else "No email column: repeat submissions are matched by name")
+
           # Trim and squeeze repeated spaces ("School of  Computing" would otherwise be its own
           # filter option); keep line breaks, which separate research areas
           clean = lambda v: re.sub(r"[^\S\n]+", " ", v or "").strip()
 
-          n = 0
+          # One card per person. If someone submits again (e.g. to update their details), keep only
+          # their latest response, i.e. the lowest row in the sheet. People are matched by email
+          # when there is one, otherwise by name ignoring case and spacing.
+          # Only counts are logged: Actions logs on a public repo are public.
+          latest, total = {}, 0
+          for r in rows:
+              out = [clean(r.get(source[c])) if c in source else "" for c in cols]
+              if not out[0]:
+                  continue
+              total += 1
+              email = clean(r.get(email_col)).lower() if email_col else ""
+              key = ("email", email) if email else ("name", out[0].casefold())
+              latest.pop(key, None)
+              latest[key] = out
+          n = len(latest)
           with open("site/data.csv", "w", encoding="utf-8", newline="") as f:
               w = csv.writer(f)
               w.writerow(cols)
-              for r in rows:
-                  out = [clean(r.get(source[c])) if c in source else "" for c in cols]
-                  if out[0]:
-                      w.writerow(out)
-                      n += 1
-          print(f"{n} rows written")
+              w.writerows(latest.values())
+          print(f"{n} rows written ({total - n} earlier duplicate responses dropped)")
           if n == 0:
               sys.exit("No rows found - check the sheet's column headers")
           EOF
@@ -157,7 +171,7 @@ jobs:
 
   deploy:
     needs: build
-    # Explicit condition: without it, a skipped `release` (schedule / form / manual runs)
+    # Explicit condition: without it, a skipped `release` (sheet-triggered / manual runs)
     # makes GitHub skip this job too, even though `build` succeeded
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
