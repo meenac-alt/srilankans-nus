@@ -1,0 +1,76 @@
+name: Build and deploy site
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 * * * *"   # refresh data from the sheet every hour
+  workflow_dispatch:       # "Run workflow" button for an instant refresh
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download sheet (link comes from a secret)
+        env:
+          SHEET_URL: ${{ secrets.SHEET_CSV_URL }}
+        run: |
+          if [ -z "$SHEET_URL" ]; then echo "::error::SHEET_CSV_URL secret is not set"; exit 1; fi
+          curl -fsSL "$SHEET_URL" -o raw.csv
+          if head -c 300 raw.csv | grep -qi '<html\|<!doctype'; then
+            echo "::error::The link returned a web page, not CSV. Use the published CSV link."
+            exit 1
+          fi
+
+      - name: Keep only Name, LinkedIn, Category
+        run: |
+          mkdir -p site
+          cp index.html site/
+          python3 - <<'EOF'
+          import csv, sys
+          with open("raw.csv", encoding="utf-8-sig", newline="") as f:
+              rows = list(csv.DictReader(f))
+          def pick(row, *keys):
+              for k, v in row.items():
+                  kk = "".join(c for c in (k or "").lower() if c.isalpha())
+                  if any(x in kk for x in keys):
+                      return (v or "").strip()
+              return ""
+          n = 0
+          with open("site/data.csv", "w", encoding="utf-8", newline="") as f:
+              w = csv.writer(f)
+              w.writerow(["Name", "LinkedIn", "Category"])
+              for r in rows:
+                  name = pick(r, "name")
+                  if name:
+                      w.writerow([name, pick(r, "linkedin", "linked"), pick(r, "category", "categ")])
+                      n += 1
+          print(f"{n} rows written")
+          if n == 0:
+              sys.exit("No rows found - check the sheet's column headers")
+          EOF
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
