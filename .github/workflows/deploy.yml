@@ -1,0 +1,95 @@
+name: Build and deploy site
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 * * * *"   # refresh data from the sheet every hour
+  workflow_dispatch:       # "Run workflow" button for an instant refresh
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The sheet link lives in the SHEET_URL repository secret, so it never appears in the
+      # public repo or site. Only the columns below are copied into the published data.csv
+      # (emails, timestamps etc. from the form are dropped).
+      - name: Download sheet and keep only public columns
+        env:
+          SHEET_URL: ${{ secrets.SHEET_URL }}
+        run: |
+          if [ -z "$SHEET_URL" ]; then echo "::error::SHEET_URL secret is not set"; exit 1; fi
+          mkdir -p site
+          cp index.html site/
+          date -u +%Y-%m-%dT%H:%M:%SZ > site/updated.txt
+          [ -d photos ] && cp -r photos site/
+          python3 - <<'EOF'
+          import csv, io, os, re, sys, urllib.request
+
+          url = os.environ["SHEET_URL"].strip()
+          # Accept a normal share link as well as a published CSV link
+          if not re.search(r"output=csv|format=csv|out:csv", url):
+              m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", url)
+              if m and m.group(1) != "e":
+                  gid = re.search(r"[#&?]gid=(\d+)", url)
+                  url = f"https://docs.google.com/spreadsheets/d/{m.group(1)}/export?format=csv" + (f"&gid={gid.group(1)}" if gid else "")
+
+          text = urllib.request.urlopen(url).read().decode("utf-8-sig")
+          if re.match(r"\s*<(!doctype|html)", text, re.I):
+              sys.exit("The link returned a web page, not CSV. Set sharing to 'Anyone with the link - Viewer', or use the published CSV link.")
+          rows = list(csv.DictReader(io.StringIO(text)))
+
+          # Match a column even if the header is written slightly differently
+          def pick(row, *keys):
+              for k, v in row.items():
+                  kk = "".join(c for c in (k or "").lower() if c.isalpha())
+                  if any(x in kk for x in keys):
+                      return (v or "").strip()
+              return ""
+
+          cols = {
+              "Name":           ("name",),
+              "Faculty":        ("faculty", "school", "college"),
+              "Category":       ("category", "categ"),
+              "LinkedIn":       ("linkedin", "linked"),
+              "Profile Picture": ("profilepic", "picture", "photo", "image"),
+              "Research Areas": ("research",),
+          }
+          n = 0
+          with open("site/data.csv", "w", encoding="utf-8", newline="") as f:
+              w = csv.writer(f)
+              w.writerow(cols)
+              for r in rows:
+                  out = [pick(r, *keys) for keys in cols.values()]
+                  if out[0]:
+                      w.writerow(out)
+                      n += 1
+          print(f"{n} rows written")
+          if n == 0:
+              sys.exit("No rows found - check the sheet's column headers")
+          EOF
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
