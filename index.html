@@ -191,6 +191,21 @@
   ];
   const NO_CATEGORY = "Other";
 
+  // Heading shown on the site for each form option. Anything not listed shows as typed.
+  const CATEGORY_LABELS = {
+    "Faculty":           "Faculty Members",
+    "PhD student":       "PhD Students",
+    "Research Fellow":   "Research Fellows",
+    "Post doc":          "Post Docs",
+    "Master Student":    "Master Students",
+    "Research Engineer": "Research Engineers",
+    "Undergraduate":     "Undergraduates"
+  };
+  const catLabel = c => {
+    const k = Object.keys(CATEGORY_LABELS).find(k => k.toLowerCase() === c.toLowerCase());
+    return k ? CATEGORY_LABELS[k] : c;
+  };
+
   // Sample rows shown when data.csv isn't available (e.g. opening index.html locally)
   const DEMO = [
     { name: "Example Student", faculty: "School of Computing", category: "PhD student", linkedin: "example-student", photo: "", research: "Machine Learning, Computer Vision" },
@@ -303,23 +318,23 @@
     $("groups").innerHTML = [...groups.keys()]
       .sort((a, b) => categoryRank(a) - categoryRank(b) || a.localeCompare(b))
       .map(c => `<section class="group">
-          <h2>${esc(c)} <span class="n">${groups.get(c).length}</span></h2>
+          <h2>${esc(catLabel(c))} <span class="n">${groups.get(c).length}</span></h2>
           <div class="grid">${groups.get(c).map(card).join("")}</div>
         </section>`)
       .join("");
   }
 
-  function fillSelect(id, label, key, order) {
+  function fillSelect(id, label, key, order, text = o => o) {
     const opts = [...new Set(data.map(d => d[key]).filter(Boolean))].sort(order);
     // Explicit value: an option's text has its whitespace collapsed, which would break the === filter
-    $(id).innerHTML = `<option value="">${label}</option>` + opts.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
+    $(id).innerHTML = `<option value="">${label}</option>` + opts.map(o => `<option value="${esc(o)}">${esc(text(o))}</option>`).join("");
   }
 
   function load(list) {
     data = list.filter(d => d.name);
     fillSelect("faculty", "All faculties", "faculty");
     fillSelect("category", "All categories", "category",
-      (a, b) => categoryRank(a) - categoryRank(b) || a.localeCompare(b));
+      (a, b) => categoryRank(a) - categoryRank(b) || a.localeCompare(b), catLabel);
     render();
   }
 
