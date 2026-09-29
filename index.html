@@ -68,12 +68,14 @@
   /* ---------- Category sections ---------- */
   .group + .group { margin-top: 40px; }
   .group h2 {
-    display: flex; align-items: center; gap: 10px;
-    margin: 0 0 16px;
-    padding-bottom: 10px;
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 0 20px;
+    padding-bottom: 12px;
     border-bottom: 2px solid var(--border);
-    font-size: 1.25rem; font-weight: 700;
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    font-weight: 800;
     color: var(--blue);
+    letter-spacing: -0.01em;
   }
   .group h2 .n {
     padding: 2px 10px;
@@ -127,15 +129,6 @@
   .info { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
   .name { font-weight: 700; font-size: 1.05rem; color: var(--blue); line-height: 1.3; }
   .faculty { font-size: .88rem; color: var(--muted); }
-  .tag {
-    align-self: flex-start;
-    margin-top: 2px;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: .76rem; font-weight: 600;
-    background: var(--orange-soft);
-    color: var(--orange-text);
-  }
   .keywords { font-size: .8rem; color: var(--muted); line-height: 1.45; margin-top: 4px; }
   .keywords b { color: var(--text); font-weight: 600; }
   .keywords i { font-style: italic; }
@@ -184,28 +177,26 @@
   // Columns: Name | Faculty | Category | LinkedIn | Profile Picture | Research Areas
   const DATA_URL = "data.csv";
 
-  // Category sections, in display order. `match` holds the options exactly as they
-  // appear in the Google Form (plus common variants people might type under "Other");
-  // `label` is the heading shown on the site.
-  // Anything that matches none of these (e.g. a custom "Other" answer, or a blank)
-  // goes in a final "Other" section, with the person's own answer shown on their card.
+  // Order the category sections appear in. Names are exactly the Google Form options.
+  // Anything typed into the form's "Other:" box gets its own section after these,
+  // alphabetically; people with no category go under "Other" at the end.
   const CATEGORY_ORDER = [
-    { match: ["Faculty"],                                       label: "Faculty" },
-    { match: ["PhD student"],                                   label: "PhD Students" },
-    { match: ["Research Fellow"],                               label: "Research Fellows" },
-    { match: ["Post doc", "Postdoc", "Postdoctoral Fellow"],    label: "Post Docs" },
-    { match: ["Master Student", "Masters Student"],             label: "Master Students" },
-    { match: ["Research Engineer", "Research Assistant"],       label: "Research Engineers/Assistants" },
-    { match: ["Undergraduate", "Undergraduate Student"],        label: "Undergraduates" }
+    "Faculty",
+    "PhD student",
+    "Research Fellow",
+    "Post doc",
+    "Master Student",
+    "Research Engineer",
+    "Undergraduate"
   ];
-  const OTHER_LABEL = "Other";
+  const NO_CATEGORY = "Other";
 
   // Sample rows shown when data.csv isn't available (e.g. opening index.html locally)
   const DEMO = [
     { name: "Example Student", faculty: "School of Computing", category: "PhD student", linkedin: "example-student", photo: "", research: "Machine Learning, Computer Vision" },
     { name: "Another Student", faculty: "College of Design and Engineering", category: "Master Student", linkedin: "https://www.linkedin.com/in/another", photo: "", research: "" },
     { name: "Third Student", faculty: "Faculty of Science", category: "Undergraduate", linkedin: "", photo: "", research: "" },
-    { name: "Fourth Student", faculty: "NUS Business School", category: "Visiting Scholar", linkedin: "fourth", photo: "", research: "" }
+    { name: "Fourth Student", faculty: "NUS Business School", category: "Faculty", linkedin: "fourth", photo: "", research: "" }
   ];
 
   let data = [];
@@ -257,8 +248,7 @@
 
   const LI_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>';
 
-  // showTag: in the "Other" section, show what the person actually wrote as their category
-  function card(d, showTag) {
+  function card(d) {
     const li = linkedinUrl(d.linkedin);
     const pics = photoUrls(d.photo);
     return `<article class="card">
@@ -269,20 +259,18 @@
       <div class="info">
         <div class="name">${esc(d.name)}</div>
         ${d.faculty ? `<div class="faculty">${esc(d.faculty)}</div>` : ""}
-        ${showTag && d.category ? `<span class="tag">${esc(d.category)}</span>` : ""}
         ${areas(d.research).length ? `<div class="keywords"><b>Research areas:</b> <i>${areas(d.research).map(esc).join(", ")}</i></div>` : ""}
         ${li ? `<a class="linkedin" href="${esc(li)}" target="_blank" rel="noopener">${LI_ICON} Connect on LinkedIn</a>` : ""}
       </div>
     </article>`;
   }
 
-  // "Master's Students" → "master student"
-  const catKey = s => s.toLowerCase().split(/[^a-z]+/).map(w => w.replace(/s$/, "")).filter(Boolean).join(" ");
-  // Section number for a category; unmatched or blank → the "Other" section (last)
-  const catIndex = c => {
-    const i = c ? CATEGORY_ORDER.findIndex(o => o.match.some(m => catKey(m) === catKey(c))) : -1;
+  // Position of a category in CATEGORY_ORDER; unlisted ones after, "Other" last
+  function categoryRank(c) {
+    if (c === NO_CATEGORY) return CATEGORY_ORDER.length + 1;
+    const i = CATEGORY_ORDER.findIndex(o => o.toLowerCase() === c.toLowerCase());
     return i < 0 ? CATEGORY_ORDER.length : i;
-  };
+  }
 
   function render() {
     const q = $("search").value.toLowerCase();
@@ -291,7 +279,7 @@
     const list = data
       .filter(d => (d.name + " " + d.research).toLowerCase().includes(q)
         && (!fac || d.faculty === fac)
-        && (!cat || d.section === Number(cat)))
+        && (!cat || d.category === cat))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const people = n => n === 1 ? "person" : "people";
@@ -304,45 +292,34 @@
       return;
     }
 
-    // Group the (already name-sorted) list into sections, in CATEGORY_ORDER order
+    // Group the (already name-sorted) list by category
     const groups = new Map();
     list.forEach(d => {
-      const i = d.section;
-      if (!groups.has(i)) groups.set(i, []);
-      groups.get(i).push(d);
+      const c = d.category || NO_CATEGORY;
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(d);
     });
 
     $("groups").innerHTML = [...groups.keys()]
-      .sort((a, b) => a - b)
-      .map(i => {
-        const isOther = i === CATEGORY_ORDER.length;
-        return `<section class="group">
-          <h2>${esc(sectionLabel(i))} <span class="n">${groups.get(i).length}</span></h2>
-          <div class="grid">${groups.get(i).map(d => card(d, isOther)).join("")}</div>
-        </section>`;
-      })
+      .sort((a, b) => categoryRank(a) - categoryRank(b) || a.localeCompare(b))
+      .map(c => `<section class="group">
+          <h2>${esc(c)} <span class="n">${groups.get(c).length}</span></h2>
+          <div class="grid">${groups.get(c).map(card).join("")}</div>
+        </section>`)
       .join("");
   }
 
-  const sectionLabel = i => i < CATEGORY_ORDER.length ? CATEGORY_ORDER[i].label : OTHER_LABEL;
-
-  // Category dropdown lists the section headings (only ones that have people), in page order
-  function fillCategorySelect() {
-    const used = [...new Set(data.map(d => d.section))].sort((a, b) => a - b);
-    $("category").innerHTML = `<option value="">All categories</option>`
-      + used.map(i => `<option value="${i}">${esc(sectionLabel(i))}</option>`).join("");
-  }
-
-  function fillSelect(id, label, key) {
-    const opts = [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
+  function fillSelect(id, label, key, order) {
+    const opts = [...new Set(data.map(d => d[key]).filter(Boolean))].sort(order);
     // Explicit value: an option's text has its whitespace collapsed, which would break the === filter
     $(id).innerHTML = `<option value="">${label}</option>` + opts.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
   }
 
   function load(list) {
-    data = list.filter(d => d.name).map(d => ({ ...d, section: catIndex(d.category) }));
+    data = list.filter(d => d.name);
     fillSelect("faculty", "All faculties", "faculty");
-    fillCategorySelect();
+    fillSelect("category", "All categories", "category",
+      (a, b) => categoryRank(a) - categoryRank(b) || a.localeCompare(b));
     render();
   }
 
