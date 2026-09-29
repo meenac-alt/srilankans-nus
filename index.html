@@ -65,6 +65,24 @@
   .count { color: var(--muted); font-size: .9rem; margin: 0 0 18px; }
   .count b { color: var(--orange-text); }
 
+  /* ---------- Category sections ---------- */
+  .group + .group { margin-top: 40px; }
+  .group h2 {
+    display: flex; align-items: center; gap: 10px;
+    margin: 0 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+    font-size: 1.25rem; font-weight: 700;
+    color: var(--blue);
+  }
+  .group h2 .n {
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: .78rem; font-weight: 600;
+    background: var(--orange-soft);
+    color: var(--orange-text);
+  }
+
   /* ---------- Cards ---------- */
   .grid {
     display: grid;
@@ -109,15 +127,6 @@
   .info { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
   .name { font-weight: 700; font-size: 1.05rem; color: var(--blue); line-height: 1.3; }
   .faculty { font-size: .88rem; color: var(--muted); }
-  .tag {
-    align-self: flex-start;
-    margin-top: 2px;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: .76rem; font-weight: 600;
-    background: var(--orange-soft);
-    color: var(--orange-text);
-  }
   .keywords { font-size: .8rem; color: var(--muted); line-height: 1.45; margin-top: 4px; }
   .keywords b { color: var(--text); font-weight: 600; }
   .keywords i { font-style: italic; }
@@ -133,7 +142,6 @@
   .linkedin svg { width: 16px; height: 16px; fill: currentColor; }
 
   .msg {
-    grid-column: 1 / -1;
     padding: 40px 16px; text-align: center; color: var(--muted);
     background: var(--surface); border-radius: 12px;
   }
@@ -156,7 +164,7 @@
     <select id="category" aria-label="Filter by category"><option value="">All categories</option></select>
   </div>
   <p class="count" id="count"></p>
-  <div class="grid" id="grid"><div class="msg">Loading…</div></div>
+  <div id="groups"><div class="msg">Loading…</div></div>
 </main>
 
 <footer>Sri Lankans in NUS · Contact and other information above was submitted directly by each individual<span id="updated"></span><span id="version"></span></footer>
@@ -166,6 +174,11 @@
   // Google Sheet whose link is stored in the SHEET_URL repository secret.
   // Columns: Name | Faculty | Category | LinkedIn | Profile Picture | Research Areas
   const DATA_URL = "data.csv";
+
+  // Order the category sections appear in (case-insensitive). Categories not listed
+  // here follow alphabetically; people with no category go under "Other" at the end.
+  const CATEGORY_ORDER = ["PhD Student", "Master's", "Undergraduate", "Alumni"];
+  const NO_CATEGORY = "Other";
 
   // Sample rows shown when data.csv isn't available (e.g. opening index.html locally)
   const DEMO = [
@@ -235,11 +248,17 @@
       <div class="info">
         <div class="name">${esc(d.name)}</div>
         ${d.faculty ? `<div class="faculty">${esc(d.faculty)}</div>` : ""}
-        ${d.category ? `<span class="tag">${esc(d.category)}</span>` : ""}
         ${areas(d.research).length ? `<div class="keywords"><b>Research areas:</b> <i>${areas(d.research).map(esc).join(", ")}</i></div>` : ""}
         ${li ? `<a class="linkedin" href="${esc(li)}" target="_blank" rel="noopener">${LI_ICON} Connect on LinkedIn</a>` : ""}
       </div>
     </article>`;
+  }
+
+  // Position of a category in CATEGORY_ORDER; unlisted ones after, "Other" last
+  function categoryRank(c) {
+    if (c === NO_CATEGORY) return CATEGORY_ORDER.length + 1;
+    const i = CATEGORY_ORDER.findIndex(o => o.toLowerCase() === c.toLowerCase());
+    return i < 0 ? CATEGORY_ORDER.length : i;
   }
 
   function render() {
@@ -256,9 +275,27 @@
     $("count").innerHTML = (q || fac || cat)
       ? `<b>${list.length}</b> of ${data.length} ${people(data.length)}`
       : `<b>${data.length}</b> ${people(data.length)}`;
-    $("grid").innerHTML = list.length
-      ? list.map(card).join("")
-      : `<div class="msg">${data.length ? "No one matches your search." : "No entries yet."}</div>`;
+
+    if (!list.length) {
+      $("groups").innerHTML = `<div class="msg">${data.length ? "No one matches your search." : "No entries yet."}</div>`;
+      return;
+    }
+
+    // Group the (already name-sorted) list by category
+    const groups = new Map();
+    list.forEach(d => {
+      const c = d.category || NO_CATEGORY;
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(d);
+    });
+
+    $("groups").innerHTML = [...groups.keys()]
+      .sort((a, b) => categoryRank(a) - categoryRank(b) || a.localeCompare(b))
+      .map(c => `<section class="group">
+          <h2>${esc(c)} <span class="n">${groups.get(c).length}</span></h2>
+          <div class="grid">${groups.get(c).map(card).join("")}</div>
+        </section>`)
+      .join("");
   }
 
   function fillSelect(id, label, key) {
@@ -281,7 +318,7 @@
   const isLocal = location.protocol === "file:" || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   const loadFailed = () => isLocal
     ? load(DEMO)
-    : $("grid").innerHTML = `<div class="msg">Couldn't load the directory. Please refresh the page or try again later.</div>`;
+    : $("groups").innerHTML = `<div class="msg">Couldn't load the directory. Please refresh the page or try again later.</div>`;
 
   // data.csv headers are written by the deploy workflow, so they're always exactly these
   const val = (r, k) => (r[k] || "").trim();
